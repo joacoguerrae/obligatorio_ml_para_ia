@@ -1,0 +1,10 @@
+
+# Archivos y carpetas de Jupyter
+.ipynb_checkpoints/
+
+
+# Carpetas personalizadas que querés ignorar
+Faces/
+modelos/
+Test/
+Background/
