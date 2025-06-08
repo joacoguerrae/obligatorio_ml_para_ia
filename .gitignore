@@ -1,7 +1,7 @@
 
 # Archivos y carpetas de Jupyter
 .ipynb_checkpoints/
-
+hog_features.npy
 
 # Carpetas personalizadas que querés ignorar
 Faces/
