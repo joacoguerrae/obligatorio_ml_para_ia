@@ -145,6 +145,79 @@ def detections_by_scale_2(
     return np.array(raw_detections), np.array(detections)
 
 
+def detections_by_scale_2_max(
+    test_image, test_scales, step, clf, pca, size=(64, 64), thresholds=[0.5]
+):
+    raw_detections = []
+    detections = []
+
+    for scale in tqdm(test_scales):
+        raw_detections_scale = []
+        detections_scale = []
+
+        indices, patches = zip(
+            *sliding_window(test_image, scale=scale, istep=step, jstep=step)
+        )
+        patches_hog = np.array([feature.hog(patch) for patch in patches])
+        # patches_hog = scaler.transform(patches_hog)
+        patches_hog = pca.transform(patches_hog)
+        indices = np.array(indices)
+
+        for thr in thresholds:
+            probas = clf.predict_proba(patches_hog)[:, 1]
+            labels = (probas >= thr).astype(int)
+            raw_detections_scale.append(labels.sum())
+
+            detecciones = indices[labels == 1]
+            scores = probas[labels == 1]
+            Ni, Nj = (int(scale * s) for s in size)
+            sizes_array = np.array([(Ni, Nj)] * len(detecciones))
+
+            detecciones, _ = non_max_suppression(
+                detecciones,
+                sizes_array,
+                overlapThresh=0.3,
+                scores=scores,
+                use_scores=True,
+            )
+
+            detections_scale.append(len(detecciones))
+
+        raw_detections.append(raw_detections_scale)
+        detections.append(detections_scale)
+
+    raw_detections = np.array(raw_detections)
+    detections = np.array(detections)
+
+    # Encontrar los índices donde el valor es mayor a 0 y mayor que el anterior y el siguiente (picos locales)
+    peak_indices = [
+        i
+        for i in range(1, len(raw_detections) - 1)
+        if raw_detections[i] > 0
+        and raw_detections[i] > raw_detections[i - 1]
+        and raw_detections[i] > raw_detections[i + 1]
+    ]
+
+    # Si hay menos de 3 picos, usar todos; si hay más, quedarnos con los 3 de mayor valor
+    if len(peak_indices) > 0:
+        # Tomar los valores de raw_detections en los picos
+        peak_values = raw_detections[peak_indices].flatten()
+        # Obtener los índices de los 3 valores más altos
+        if len(peak_values) > 3:
+            top3_idx = np.argsort(peak_values)[-3:][::-1]
+            selected_indices = np.array(peak_indices)[top3_idx]
+        else:
+            selected_indices = np.array(peak_indices)
+            raw_detections = raw_detections[selected_indices]
+            detections = detections[selected_indices]
+    else:
+        # Si no hay picos, devolver arrays vacíos
+        raw_detections = np.empty((0,) + raw_detections.shape[1:])
+        detections = np.empty((0,) + detections.shape[1:])
+
+    return np.array(raw_detections), np.array(detections)
+
+
 def evaluate_detections_by_scale(
     image,
     test_scales,
@@ -204,7 +277,7 @@ def evaluate_detections_by_scale_2(
     clf,
     # scaler,
     pca,
-    thresholds=[0.5],
+    thresholds=[0.8],
     patch_size=(64, 64),
     step=2,
     true_scale=None,
